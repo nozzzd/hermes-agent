@@ -92,7 +92,10 @@ describe('case on a case-sensitive macOS volume', () => {
 // macOS and Windows match names with Unicode case folding (`ſ` is `s`), so a
 // name that folds onto a key file may open that key file there.
 describe('sensitive names after Unicode folding', () => {
-  it.each(['id_r\u017fa', '.ENV', '\uff0eenv', '.env.LOCAL'])('refuses reading or writing %s', async name => {
+  // HFS+ also ignores zero-width and other default-ignorable code points.
+  it.each(['id_r\u017fa', '.ENV', '\uff0eenv', '.env.LOCAL', '.e\u200dnv', 'id_\u200brsa', '.np\ufeffmrc'])(
+    'refuses reading or writing %s',
+    async name => {
     const files = make()
     const id = await grant(files)
     fs.writeFileSync(path.join(vault, name), 'SECRET=1\n')
@@ -108,7 +111,8 @@ describe('sensitive names after Unicode folding', () => {
       error: 'sensitive-file'
     })
     expect(fs.existsSync(path.join(vault, 'fresh', name))).toBe(false)
-  })
+    }
+  )
 
   it('refuses a folded key folder as a path and as a rename target', async () => {
     const files = make()

@@ -76,10 +76,38 @@ export async function realpathOrNull(target: string): Promise<null | string> {
   }
 }
 
+// Default-ignorable code points (zero-width, bidi marks, BOM, soft hyphen,
+// variation selectors), which HFS+ skips when it compares names.
+const IGNORABLE_RANGES: [number, number][] = [
+  [0xad, 0xad],
+  [0x34f, 0x34f],
+  [0x115f, 0x1160],
+  [0x17b4, 0x17b5],
+  [0x180b, 0x180f],
+  [0x200b, 0x200f],
+  [0x202a, 0x202e],
+  [0x2060, 0x206f],
+  [0x3164, 0x3164],
+  [0xfe00, 0xfe0f],
+  [0xfeff, 0xfeff],
+  [0xffa0, 0xffa0]
+]
+
+const ignorable = (char: string) => {
+  const code = char.codePointAt(0) ?? 0
+
+  return IGNORABLE_RANGES.some(([low, high]) => code >= low && code <= high)
+}
+
 // The app's sensitive-file rules, checked on the name as given and as macOS
-// and Windows match it (Unicode case folding: `id_rſa` opens `id_rsa` there).
+// and Windows may match it (Unicode case folding: `id_rſa` opens `id_rsa`
+// there; HFS+ also ignores zero-width characters).
 export function sensitiveReason(target: string): null | string {
-  const folded = target.normalize('NFKC').toLowerCase()
+  const folded = [...target.normalize('NFKC')]
+    .filter(char => !ignorable(char))
+    .join('')
+    .toLowerCase()
+
   const reason = sensitiveFileBlockReason(target) ?? sensitiveFileBlockReason(folded)
 
   if (reason) {
