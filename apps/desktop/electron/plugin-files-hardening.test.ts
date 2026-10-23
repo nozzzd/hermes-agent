@@ -210,6 +210,51 @@ describe('the grants record', () => {
     expect(fs.readFileSync(record, 'utf8')).toBe(before)
   })
 
+  it.runIf(unprivileged)('a revoke that cannot be saved does not take effect now or after restart', async () => {
+    const id = await grantVault()
+    const base = path.join(userData, 'plugin-files')
+    fs.chmodSync(base, 0o500)
+
+    await expect(files.revoke('plexus', id)).rejects.toThrow()
+    fs.chmodSync(base, 0o700)
+
+    expect((await files.grants('plexus')).map(row => row.id)).toEqual([id])
+    expect((await make().grants('plexus')).map(row => row.id)).toEqual([id])
+  })
+
+  it('a first read still in flight cannot undo a revoke made meanwhile', async () => {
+    const id = await grantVault()
+    const fresh = make()
+    const original = fs.promises.readFile.bind(fs.promises) as (...args: unknown[]) => Promise<unknown>
+
+    let releaseFirst = () => {}
+    const firstHeld = new Promise<void>(resolve => (releaseFirst = resolve))
+    let calls = 0
+
+    // The first read of the record finishes only after the revoke has saved.
+    vi.spyOn(fs.promises, 'readFile').mockImplementation((async (...args: unknown[]) => {
+      const data = await original(...args)
+
+      if (String(args[0]).endsWith('grants.json') && calls++ === 0) {
+        await firstHeld
+      }
+
+      return data
+    }) as never)
+
+    const reading = fresh.grants('plexus')
+    const revoking = fresh.revoke('plexus', id)
+    await new Promise(resolve => setTimeout(resolve, 200))
+    releaseFirst()
+
+    expect((await Promise.all([reading, revoking]))[1]).toEqual({ ok: true, removed: 1 })
+    expect(await fresh.grants('plexus')).toEqual([])
+    expect(await fresh.run('plexus', { op: 'list', folder: id, path: '' })).toMatchObject({
+      ok: false,
+      error: 'not-granted'
+    })
+  })
+
   it('treats an id such as `constructor` as a plain key', async () => {
     expect(await files.addGrant('constructor', vault)).toMatchObject({ ok: true })
     expect(await files.grants('toString')).toEqual([])
