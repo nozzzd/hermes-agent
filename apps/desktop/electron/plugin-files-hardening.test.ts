@@ -96,7 +96,11 @@ describe('only plain files', () => {
   it.runIf(process.platform === 'linux').each(['/proc', '/sys', '/dev', '/proc/self'])(
     'refuses to grant the kernel pseudo-filesystem %s',
     async folder => {
-      expect(await files.addGrant('plexus', folder)).toMatchObject({ ok: false, error: 'protected' })
+      expect(await files.addGrant('plexus', folder)).toMatchObject({
+        ok: false,
+        error: 'protected',
+        message: expect.stringContaining('system folder')
+      })
     }
   )
 

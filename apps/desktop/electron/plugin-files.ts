@@ -334,6 +334,10 @@ export function createPluginFiles(deps: PluginFilesDeps): PluginFiles {
           return fail('not-a-directory', 'Pick a folder.')
         }
 
+        if ((await realRoots(systemRoots(platform))).some(root => insideLoose(real, root))) {
+          return fail('protected', 'That is a system folder and cannot be shared with a plugin.')
+        }
+
         const roots = await protectedRoots()
 
         if (overlapsProtected(real, roots) || (await overlapsByIdentity(real, roots))) {
